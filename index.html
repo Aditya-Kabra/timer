@@ -1,672 +1,693 @@
-import React, { useState, useEffect } from 'react';
-import { Clock, RotateCcw, CheckCircle, Trash2 } from 'lucide-react';
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dual Focus Timer</title>
+    <!-- Include React and ReactDOM via CDN -->
+    <script src="https://unpkg.com/react@17/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@17/umd/react-dom.development.js"></script>
+    <!-- Include Babel for JSX transformation -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Include Lucide Icons via CDN -->
+    <script src="https://unpkg.com/lucide-react@latest"></script>
+</head>
+<body>
+    <div id="root"></div>
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+        const { Clock, RotateCcw, CheckCircle, Trash2 } = lucideReact;
 
-const DualFocusTimer = () => {
-  // Load saved data from localStorage or use defaults
-  const loadFromStorage = (key, defaultValue) => {
-    try {
-      const saved = localStorage.getItem(key);
-      return saved ? JSON.parse(saved) : defaultValue;
-    } catch (error) {
-      console.error(`Error loading ${key} from localStorage:`, error);
-      return defaultValue;
-    }
-  };
-  
-  // Default values
-  const defaultWorkTime = 4 * 60 * 60; // 4 hours in seconds
-  const defaultBreakTime = 8 * 60 * 60; // 8 hours in seconds
+        const DualFocusTimer = () => {
+            // Load saved data from localStorage or use defaults
+            const loadFromStorage = (key, defaultValue) => {
+                try {
+                    const saved = localStorage.getItem(key);
+                    return saved ? JSON.parse(saved) : defaultValue;
+                } catch (error) {
+                    console.error(`Error loading ${key} from localStorage:`, error);
+                    return defaultValue;
+                }
+            };
 
-  // Initialize state with localStorage or defaults
-  const [workTimeTotal, setWorkTimeTotal] = useState(() => loadFromStorage('workTimeTotal', defaultWorkTime));
-  const [breakTimeTotal, setBreakTimeTotal] = useState(() => loadFromStorage('breakTimeTotal', defaultBreakTime));
-  const [workTimeRemaining, setWorkTimeRemaining] = useState(() => loadFromStorage('workTimeRemaining', defaultWorkTime));
-  const [breakTimeRemaining, setBreakTimeRemaining] = useState(() => loadFromStorage('breakTimeRemaining', defaultBreakTime));
-  const [isWorkActive, setIsWorkActive] = useState(false); // Always start with work inactive when page loads
-  const [isBreakActive, setIsBreakActive] = useState(() => loadFromStorage('isBreakActive', false));
-  const [dailyGoalMet, setDailyGoalMet] = useState(() => loadFromStorage('dailyGoalMet', false));
-  const [logs, setLogs] = useState(() => loadFromStorage('logs', []));
-  const [currentFocus, setCurrentFocus] = useState("");
-  const [savedFocusItems, setSavedFocusItems] = useState(() => loadFromStorage('savedFocusItems', []));
-  const [editingFocusId, setEditingFocusId] = useState(null);
-  const [breakStartTimestamp, setBreakStartTimestamp] = useState(() => loadFromStorage('breakStartTimestamp', null));
-  
-  // Break activities states - mirroring focus items structure
-  const [currentBreakActivity, setCurrentBreakActivity] = useState("");
-  const [savedBreakActivities, setSavedBreakActivities] = useState(() => loadFromStorage('savedBreakActivities', []));
-  const [editingBreakActivityId, setEditingBreakActivityId] = useState(null);
-  
-  // Save to localStorage whenever relevant state changes
-  useEffect(() => {
-    localStorage.setItem('workTimeTotal', JSON.stringify(workTimeTotal));
-  }, [workTimeTotal]);
-  
-  useEffect(() => {
-    localStorage.setItem('breakTimeTotal', JSON.stringify(breakTimeTotal));
-  }, [breakTimeTotal]);
-  
-  useEffect(() => {
-    localStorage.setItem('workTimeRemaining', JSON.stringify(workTimeRemaining));
-  }, [workTimeRemaining]);
-  
-  useEffect(() => {
-    localStorage.setItem('breakTimeRemaining', JSON.stringify(breakTimeRemaining));
-  }, [breakTimeRemaining]);
-  
-  useEffect(() => {
-    localStorage.setItem('dailyGoalMet', JSON.stringify(dailyGoalMet));
-  }, [dailyGoalMet]);
-  
-  useEffect(() => {
-    localStorage.setItem('logs', JSON.stringify(logs));
-  }, [logs]);
-  
-  useEffect(() => {
-    localStorage.setItem('savedFocusItems', JSON.stringify(savedFocusItems));
-  }, [savedFocusItems]);
-  
-  useEffect(() => {
-    localStorage.setItem('isBreakActive', JSON.stringify(isBreakActive));
-  }, [isBreakActive]);
-  
-  useEffect(() => {
-    localStorage.setItem('breakStartTimestamp', JSON.stringify(breakStartTimestamp));
-  }, [breakStartTimestamp]);
-  
-  // Save break activities to localStorage
-  useEffect(() => {
-    localStorage.setItem('savedBreakActivities', JSON.stringify(savedBreakActivities));
-  }, [savedBreakActivities]);
-  
-  // CRITICAL: Initialize timers on app load to account for time passed while closed
-  useEffect(() => {
-    // Only run this once on component mount
-    const now = Date.now();
-    
-    // If work was active when page was closed, switch to break mode
-    if (isWorkActive) {
-      setIsWorkActive(false);
-      setIsBreakActive(true);
-      setBreakStartTimestamp(now);
-      addLog("Page was closed while in work mode. Switched to break mode.");
-    }
-    // If break was already active, update the elapsed time
-    else if (isBreakActive && breakStartTimestamp) {
-      const elapsedSeconds = Math.floor((now - breakStartTimestamp) / 1000);
-      
-      // Calculate how much time has passed while app was closed
-      if (elapsedSeconds > 0) {
-        // Calculate new remaining break time
-        const newRemainingBreakTime = Math.max(0, breakTimeRemaining - elapsedSeconds);
-        
-        // Update the break timer
-        setBreakTimeRemaining(newRemainingBreakTime);
-        
-        // If break time completed while app was closed
-        if (newRemainingBreakTime === 0) {
-          // Reset break timer but keep break mode active
-          setBreakTimeRemaining(breakTimeTotal);
-          setBreakStartTimestamp(now);
-          addLog("Break time completed while app was closed! Starting a new break period.");
-        } else {
-          // Otherwise update the timestamp to now
-          setBreakStartTimestamp(now);
-          addLog(`Break timer resumed with ${formatTime(newRemainingBreakTime)} remaining`);
-        }
-      }
-    }
-    // If neither timer was active, start break mode by default
-    else if (!isBreakActive && !isWorkActive) {
-      setIsBreakActive(true);
-      setBreakStartTimestamp(now);
-      addLog("App initialized in break mode by default.");
-    }
-    
-    // Register page visibility change listener
-    const handleVisibilityChange = () => {
-      if (document.hidden) {
-        // Page is being hidden/closed
-        if (isWorkActive) {
-          // Save that we're switching from work to break directly to localStorage
-          // This ensures the data is saved even if React state doesn't update in time
-          localStorage.setItem('isWorkActive', 'false');
-          localStorage.setItem('isBreakActive', 'true');
-          localStorage.setItem('breakStartTimestamp', Date.now().toString());
-          localStorage.setItem('lastPageAction', 'Page was hidden - Switched from work to break mode');
-          
-          // Also update React state
-          setIsWorkActive(false);
-          setIsBreakActive(true);
-          setBreakStartTimestamp(Date.now());
-          addLog("Page hidden - Switched from work to break mode");
-        }
-      } else {
-        // Page is becoming visible again
-        const lastAction = localStorage.getItem('lastPageAction');
-        if (lastAction && lastAction.includes('hidden')) {
-          // Clear the flag
-          localStorage.setItem('lastPageAction', '');
-          addLog("Page visible again after being hidden");
-        }
-      }
-    };
-    
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    
-    // Add beforeunload event handler to catch browser/tab closing
-    const handleBeforeUnload = () => {
-      if (isWorkActive) {
-        // Direct localStorage updates to ensure they're saved
-        localStorage.setItem('isWorkActive', 'false');
-        localStorage.setItem('isBreakActive', 'true');
-        localStorage.setItem('breakStartTimestamp', Date.now().toString());
-        localStorage.setItem('lastPageAction', 'Page was closed - Switched from work to break mode');
-      }
-    };
-    
-    window.addEventListener("beforeunload", handleBeforeUnload);
-    
-    return () => {
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-      window.removeEventListener("beforeunload", handleBeforeUnload);
-    };
-  }, []); // Empty dependency array = run once on mount
-  
-  useEffect(() => {
-    let interval;
-    
-    // Work timer - only runs when app is open
-    if (isWorkActive && workTimeRemaining > 0) {
-      // Work timer is active, ensure break timer is inactive
-      if (isBreakActive) {
-        setIsBreakActive(false);
-        setBreakStartTimestamp(null);
-      }
-      
-      // Standard interval for work timer
-      interval = setInterval(() => {
-        setWorkTimeRemaining(prev => prev - 1);
-      }, 1000);
-    } 
-    // Break timer - continues even when app is closed
-    else if (isBreakActive && breakTimeRemaining > 0) {
-      // If break just started, set the timestamp
-      if (!breakStartTimestamp) {
-        setBreakStartTimestamp(Date.now());
-      }
-      
-      // While app is open, we need an interval for visual updates
-      interval = setInterval(() => {
-        const now = Date.now();
-        const elapsedSeconds = Math.floor((now - breakStartTimestamp) / 1000);
-        
-        // Only update if time has actually passed
-        if (elapsedSeconds > 0) {
-          const newBreakTimeRemaining = Math.max(0, breakTimeRemaining - elapsedSeconds);
-          setBreakTimeRemaining(newBreakTimeRemaining);
-          setBreakStartTimestamp(now);
-          
-          // Check if break time completed during this interval
-          if (newBreakTimeRemaining === 0) {
-            setIsBreakActive(false);
-            setBreakStartTimestamp(null);
-            addLog("Break time complete!");
-            
-            // Only start work if the daily goal isn't met yet
-            if (!dailyGoalMet && workTimeRemaining > 0) {
-              setIsWorkActive(true);
-            }
-          }
-        }
-      }, 1000);
-    } 
-    // Work time complete
-    else if (workTimeRemaining === 0 && !dailyGoalMet) {
-      setDailyGoalMet(true);
-      setIsWorkActive(false);
-      setIsBreakActive(true);
-      setBreakStartTimestamp(Date.now());
-      addLog("Daily work goal met! 🎉");
-    } 
-    // Break time complete
-    else if (breakTimeRemaining === 0 && isBreakActive) {
-      // Instead of turning off break mode, reset the break timer
-      setBreakTimeRemaining(breakTimeTotal);
-      setBreakStartTimestamp(Date.now());
-      addLog("Break time complete! Starting a new break period.");
-    }
-    
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [isWorkActive, isBreakActive, workTimeRemaining, breakTimeRemaining, dailyGoalMet, breakStartTimestamp]);
-  
-  const formatTime = (seconds) => {
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = seconds % 60;
-    
-    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
-  
-  const toggleWorkTimer = () => {
-    // If we're starting work, stop break
-    if (!isWorkActive) {
-      setIsWorkActive(true);
-      setIsBreakActive(false);
-      setBreakStartTimestamp(null); // Clear break timestamp when switching to work
-      addLog("Switched to work session" + (currentFocus ? `: ${currentFocus}` : ""));
-    } 
-    // If we're stopping work, start break
-    else {
-      setIsWorkActive(false);
-      setIsBreakActive(true);
-      setBreakStartTimestamp(Date.now()); // Set break start timestamp
-      addLog("Switched to break session");
-    }
-  };
-  
-  const toggleBreakTimer = () => {
-    // We now only allow switching from break to work, not from work to break
-    // since break is the default state when work is not active
-    if (isBreakActive) {
-      setIsBreakActive(false);
-      setIsWorkActive(true);
-      setBreakStartTimestamp(null); // Clear break timestamp
-      addLog("Switched to work session");
-    }
-    // No else case needed as break should always be on when work is off
-    // This is handled in the work timer toggle
-  };
-  
-  const resetTimers = () => {
-    setIsWorkActive(false);
-    setIsBreakActive(true); // Ensure break mode is active when work is not
-    setWorkTimeRemaining(workTimeTotal);
-    setBreakTimeRemaining(breakTimeTotal);
-    setBreakStartTimestamp(Date.now()); // Set break start timestamp
-    setDailyGoalMet(false);
-    addLog("Reset all timers - now in break mode");
-  };
-  
-  // Complete reset function that clears all data for a pristine state
-  const clearAllData = () => {
-    // Clear localStorage first to remove everything
-    localStorage.clear();
-    
-    // Reset all state to initial defaults
-    setIsWorkActive(false);
-    setIsBreakActive(false);
-    setWorkTimeTotal(defaultWorkTime);
-    setBreakTimeTotal(defaultBreakTime);
-    setWorkTimeRemaining(defaultWorkTime);
-    setBreakTimeRemaining(defaultBreakTime);
-    setBreakStartTimestamp(null); // Clear break timestamp
-    setDailyGoalMet(false);
-    setLogs([]); // Empty logs completely for pristine state
-    setCurrentFocus("");
-    setSavedFocusItems([]);
-    setEditingFocusId(null);
-    setCurrentBreakActivity("");
-    setSavedBreakActivities([]);
-    setEditingBreakActivityId(null);
-  };
-  
-  const addLog = (message) => {
-    const now = new Date();
-    const timeString = now.toLocaleTimeString();
-    setLogs(prev => [`${timeString} - ${message}`, ...prev.slice(0, 9)]);
-  };
-  
-  const calculateProgress = (remaining, total) => {
-    return ((total - remaining) / total) * 100;
-  };
-  
-  const workProgress = calculateProgress(workTimeRemaining, workTimeTotal);
-  const breakProgress = calculateProgress(breakTimeRemaining, breakTimeTotal);
-  
-  return (
-    <div className="flex flex-col h-full p-6 max-w-4xl mx-auto bg-gray-50 rounded-lg shadow-lg">
-      <h1 className="text-3xl font-bold text-center mb-2">Dual Focus Timer</h1>
-      <p className="text-center text-gray-600 mb-2">24-hour day: 8 hours sleep, 4 hours focused work, 8 hours break time</p>
-      <p className="text-center text-blue-600 font-medium mb-6">Work time only progresses when this page is open</p>
-      
-      <div className="flex flex-col md:flex-row gap-8 mb-8">
-        {/* Work Timer */}
-        <div className="flex-1 bg-white p-6 rounded-lg shadow relative">
-          <div 
-            className="absolute inset-0 bg-blue-100 rounded-lg" 
-            style={{ width: `${workProgress}%`, transition: 'width 1s linear' }}
-          ></div>
-          <div className="relative">
-            <div className="mb-4">
-              <div className="flex">
-                <input 
-                  type="text" 
-                  value={currentFocus}
-                  onChange={(e) => setCurrentFocus(e.target.value)}
-                  placeholder="What are you focusing on now?" 
-                  className="flex-1 p-2 border border-blue-200 rounded-l-md focus:outline-none focus:ring-2 focus:ring-blue-300"
-                />
-                <button
-                  onClick={() => {
-                    if (currentFocus.trim()) {
-                      if (editingFocusId !== null) {
-                        // Update existing item
-                        setSavedFocusItems(savedFocusItems.map(item => 
-                          item.id === editingFocusId ? {...item, text: currentFocus} : item
-                        ));
-                        setEditingFocusId(null);
-                      } else {
-                        // Add new item
-                        setSavedFocusItems([
-                          ...savedFocusItems,
-                          { id: Date.now(), text: currentFocus }
-                        ]);
-                      }
-                      setCurrentFocus("");
-                      addLog(`Saved focus: ${currentFocus}`);
+            // Default values
+            const defaultWorkTime = 4 * 60 * 60; // 4 hours in seconds
+            const defaultBreakTime = 8 * 60 * 60; // 8 hours in seconds
+
+            // Initialize state with localStorage or defaults
+            const [workTimeTotal, setWorkTimeTotal] = useState(() => loadFromStorage('workTimeTotal', defaultWorkTime));
+            const [breakTimeTotal, setBreakTimeTotal] = useState(() => loadFromStorage('breakTimeTotal', defaultBreakTime));
+            const [workTimeRemaining, setWorkTimeRemaining] = useState(() => loadFromStorage('workTimeRemaining', defaultWorkTime));
+            const [breakTimeRemaining, setBreakTimeRemaining] = useState(() => loadFromStorage('breakTimeRemaining', defaultBreakTime));
+            const [isWorkActive, setIsWorkActive] = useState(false); // Always start with work inactive when page loads
+            const [isBreakActive, setIsBreakActive] = useState(() => loadFromStorage('isBreakActive', false));
+            const [dailyGoalMet, setDailyGoalMet] = useState(() => loadFromStorage('dailyGoalMet', false));
+            const [logs, setLogs] = useState(() => loadFromStorage('logs', []));
+            const [currentFocus, setCurrentFocus] = useState("");
+            const [savedFocusItems, setSavedFocusItems] = useState(() => loadFromStorage('savedFocusItems', []));
+            const [editingFocusId, setEditingFocusId] = useState(null);
+            const [breakStartTimestamp, setBreakStartTimestamp] = useState(() => loadFromStorage('breakStartTimestamp', null));
+
+            // Break activities states - mirroring focus items structure
+            const [currentBreakActivity, setCurrentBreakActivity] = useState("");
+            const [savedBreakActivities, setSavedBreakActivities] = useState(() => loadFromStorage('savedBreakActivities', []));
+            const [editingBreakActivityId, setEditingBreakActivityId] = useState(null);
+
+            // Save to localStorage whenever relevant state changes
+            useEffect(() => {
+                localStorage.setItem('workTimeTotal', JSON.stringify(workTimeTotal));
+            }, [workTimeTotal]);
+
+            useEffect(() => {
+                localStorage.setItem('breakTimeTotal', JSON.stringify(breakTimeTotal));
+            }, [breakTimeTotal]);
+
+            useEffect(() => {
+                localStorage.setItem('workTimeRemaining', JSON.stringify(workTimeRemaining));
+            }, [workTimeRemaining]);
+
+            useEffect(() => {
+                localStorage.setItem('breakTimeRemaining', JSON.stringify(breakTimeRemaining));
+            }, [breakTimeRemaining]);
+
+            useEffect(() => {
+                localStorage.setItem('dailyGoalMet', JSON.stringify(dailyGoalMet));
+            }, [dailyGoalMet]);
+
+            useEffect(() => {
+                localStorage.setItem('logs', JSON.stringify(logs));
+            }, [logs]);
+
+            useEffect(() => {
+                localStorage.setItem('savedFocusItems', JSON.stringify(savedFocusItems));
+            }, [savedFocusItems]);
+
+            useEffect(() => {
+                localStorage.setItem('isBreakActive', JSON.stringify(isBreakActive));
+            }, [isBreakActive]);
+
+            useEffect(() => {
+                localStorage.setItem('breakStartTimestamp', JSON.stringify(breakStartTimestamp));
+            }, [breakStartTimestamp]);
+
+            // Save break activities to localStorage
+            useEffect(() => {
+                localStorage.setItem('savedBreakActivities', JSON.stringify(savedBreakActivities));
+            }, [savedBreakActivities]);
+
+            // CRITICAL: Initialize timers on app load to account for time passed while closed
+            useEffect(() => {
+                // Only run this once on component mount
+                const now = Date.now();
+
+                // If work was active when page was closed, switch to break mode
+                if (isWorkActive) {
+                    setIsWorkActive(false);
+                    setIsBreakActive(true);
+                    setBreakStartTimestamp(now);
+                    addLog("Page was closed while in work mode. Switched to break mode.");
+                }
+                // If break was already active, update the elapsed time
+                else if (isBreakActive && breakStartTimestamp) {
+                    const elapsedSeconds = Math.floor((now - breakStartTimestamp) / 1000);
+
+                    // Calculate how much time has passed while app was closed
+                    if (elapsedSeconds > 0) {
+                        // Calculate new remaining break time
+                        const newRemainingBreakTime = Math.max(0, breakTimeRemaining - elapsedSeconds);
+
+                        // Update the break timer
+                        setBreakTimeRemaining(newRemainingBreakTime);
+
+                        // If break time completed while app was closed
+                        if (newRemainingBreakTime === 0) {
+                            // Reset break timer but keep break mode active
+                            setBreakTimeRemaining(breakTimeTotal);
+                            setBreakStartTimestamp(now);
+                            addLog("Break time completed while app was closed! Starting a new break period.");
+                        } else {
+                            // Otherwise update the timestamp to now
+                            setBreakStartTimestamp(now);
+                            addLog(`Break timer resumed with ${formatTime(newRemainingBreakTime)} remaining`);
+                        }
                     }
-                  }}
-                  className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-2 rounded-r-md"
-                >
-                  {editingFocusId !== null ? "Update" : "Save"}
-                </button>
-              </div>
-              
-              {savedFocusItems.length > 0 && (
-                <div className="mt-2 max-h-32 overflow-y-auto">
-                  <div className="flex justify-between items-center">
-                    <h3 className="text-sm font-medium text-gray-700 mb-1">Saved focus items:</h3>
-                    <span className="text-xs text-gray-500">(Click on an item to use it)</span>
-                  </div>
-                  <ul className="space-y-1">
-                    {savedFocusItems.map(item => (
-                      <li key={item.id} className="flex items-center text-sm bg-gray-50 p-1 rounded">
-                        <span 
-                          className="flex-1 truncate cursor-pointer hover:underline"
-                          onClick={() => {
-                            setCurrentFocus(item.text);
-                            addLog(`Selected focus: ${item.text}`);
-                          }}
-                        >
-                          {item.text}
-                        </span>
-                        <button
-                          onClick={() => {
-                            setCurrentFocus(item.text);
-                            setEditingFocusId(item.id);
-                          }}
-                          className="text-blue-500 hover:text-blue-700 ml-1"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => {
-                            setSavedFocusItems(savedFocusItems.filter(i => i.id !== item.id));
-                            if (editingFocusId === item.id) {
-                              setEditingFocusId(null);
-                              setCurrentFocus("");
-                            }
-                          }}
-                          className="text-red-500 hover:text-red-700 ml-1"
-                        >
-                          Delete
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-          
-            <h2 className="text-xl font-semibold mb-4 flex items-center">
-              <Clock className="mr-2" /> Work Time ({Math.floor(workTimeTotal / 3600)}h)
-            </h2>
-            <div className="text-5xl font-mono text-center my-6">
-              {formatTime(workTimeRemaining)}
-            </div>
-            
-            <div className="flex justify-center gap-4">
-              <button 
-                onClick={toggleWorkTimer}
-                className={`p-3 rounded-full ${isWorkActive ? 'bg-blue-500 hover:bg-blue-600' : 'bg-gray-200 hover:bg-gray-300'} transition-colors`}
-              >
-                {isWorkActive ? <Clock size={36} className="text-white" /> : <Clock size={36} className="text-gray-600" />}
-              </button>
-            </div>
-            {dailyGoalMet && (
-              <div className="mt-4 text-center text-green-600 flex items-center justify-center">
-                <CheckCircle className="mr-2" /> Daily goal completed!
-              </div>
-            )}
-          </div>
-        </div>
-        
-        {/* Break Timer */}
-        <div className="flex-1 bg-white p-6 rounded-lg shadow relative">
-          <div 
-            className="absolute inset-0 bg-green-100 rounded-lg" 
-            style={{ width: `${breakProgress}%`, transition: 'width 1s linear' }}
-          ></div>
-          <div className="relative">
-            <div className="mb-4">
-              <div className="flex">
-                <input 
-                  type="text" 
-                  value={currentBreakActivity}
-                  onChange={(e) => setCurrentBreakActivity(e.target.value)}
-                  placeholder="What would you like to do on your break?" 
-                  className="flex-1 p-2 border border-green-200 rounded-l-md focus:outline-none focus:ring-2 focus:ring-green-300"
-                />
-                <button
-                  onClick={() => {
-                    if (currentBreakActivity.trim()) {
-                      if (editingBreakActivityId !== null) {
-                        // Update existing item
-                        setSavedBreakActivities(savedBreakActivities.map(item => 
-                          item.id === editingBreakActivityId ? {...item, text: currentBreakActivity} : item
-                        ));
-                        setEditingBreakActivityId(null);
-                      } else {
-                        // Add new item
-                        setSavedBreakActivities([
-                          ...savedBreakActivities,
-                          { id: Date.now(), text: currentBreakActivity }
-                        ]);
-                      }
-                      setCurrentBreakActivity("");
-                      addLog(`Saved break activity: ${currentBreakActivity}`);
-                    }
-                  }}
-                  className="bg-green-500 hover:bg-green-600 text-white px-3 py-2 rounded-r-md"
-                >
-                  {editingBreakActivityId !== null ? "Update" : "Save"}
-                </button>
-              </div>
-              
-              {savedBreakActivities.length > 0 && (
-                <div className="mt-2 max-h-32 overflow-y-auto">
-                  <div className="flex justify-between items-center">
-                    <h3 className="text-sm font-medium text-gray-700 mb-1">Break activities:</h3>
-                    <span className="text-xs text-gray-500">(Click on an item to use it)</span>
-                  </div>
-                  <ul className="space-y-1">
-                    {savedBreakActivities.map(item => (
-                      <li key={item.id} className="flex items-center text-sm bg-gray-50 p-1 rounded">
-                        <span 
-                          className="flex-1 truncate cursor-pointer hover:underline"
-                          onClick={() => {
-                            setCurrentBreakActivity(item.text);
-                            addLog(`Selected break activity: ${item.text}`);
-                          }}
-                        >
-                          {item.text}
-                        </span>
-                        <button
-                          onClick={() => {
-                            setCurrentBreakActivity(item.text);
-                            setEditingBreakActivityId(item.id);
-                          }}
-                          className="text-green-500 hover:text-green-700 ml-1"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => {
-                            setSavedBreakActivities(savedBreakActivities.filter(i => i.id !== item.id));
-                            if (editingBreakActivityId === item.id) {
-                              setEditingBreakActivityId(null);
-                              setCurrentBreakActivity("");
-                            }
-                          }}
-                          className="text-red-500 hover:text-red-700 ml-1"
-                        >
-                          Delete
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-            
-            <h2 className="text-xl font-semibold mb-4 flex items-center">
-              <Clock className="mr-2" /> Break Time ({Math.floor(breakTimeTotal / 3600)}h)
-            </h2>
-            <div className="text-5xl font-mono text-center my-6">
-              {formatTime(breakTimeRemaining)}
-            </div>
-            <div className="flex justify-center gap-4">
-              <button 
-                onClick={toggleBreakTimer}
-                className={`p-3 rounded-full ${isBreakActive ? 'bg-green-500 hover:bg-green-600' : 'bg-gray-200 hover:bg-gray-300'} transition-colors`}
-              >
-                {isBreakActive ? <Clock size={36} className="text-white" /> : <Clock size={36} className="text-gray-600" />}
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-      
-      <div className="flex justify-center mb-8">
-        <button 
-          onClick={resetTimers} 
-          className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg flex items-center cursor-pointer"
-        >
-          <RotateCcw className="mr-2 h-5 w-5" /> Reset Timers
-        </button>
-      </div>
-      
-      <div className="bg-white p-6 rounded-lg shadow mb-6">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-semibold">Activity Log</h2>
-        </div>
-        <div className="border rounded-lg divide-y max-h-64 overflow-y-auto">
-          {logs.length === 0 ? (
-            <p className="p-4 text-center text-gray-500">No activity yet</p>
-          ) : (
-            logs.map((log, index) => (
-              <div key={index} className="p-3">
-                {log}
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-      
-      <div className="bg-white p-6 rounded-lg shadow">
-        <h2 className="text-xl font-semibold mb-4">Settings</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <label className="block mb-2 font-medium">Work Time (hours)</label>
-            <select 
-              value={Math.floor(workTimeTotal / 3600)} 
-              onChange={(e) => {
-                const newHours = parseInt(e.target.value);
-                setWorkTimeTotal(newHours * 3600);
-                setWorkTimeRemaining(newHours * 3600);
-              }}
-              className="w-full p-2 border rounded-lg"
-              disabled={isWorkActive || isBreakActive}
-            >
-              {[1, 2, 3, 4, 5, 6, 7, 8].map(hours => (
-                <option key={hours} value={hours}>{hours} hours</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block mb-2 font-medium">Break Time (hours)</label>
-            <select 
-              value={Math.floor(breakTimeTotal / 3600)} 
-              onChange={(e) => {
-                const newHours = parseInt(e.target.value);
-                setBreakTimeTotal(newHours * 3600);
-                setBreakTimeRemaining(newHours * 3600);
-              }}
-              className="w-full p-2 border rounded-lg"
-              disabled={isWorkActive || isBreakActive}
-            >
-              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(hours => (
-                <option key={hours} value={hours}>{hours} hours</option>
-              ))}
-            </select>
-          </div>
-        </div>
-        
-        <div className="mt-6 bg-indigo-50 p-4 rounded-lg flex items-center">
-          <div className="w-10 h-10 bg-indigo-200 rounded-full flex items-center justify-center mr-4">
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-indigo-600">
-              <path d="M12 18c-3.3 0-6-2.7-6-6s2.7-6 6-6 6 2.7 6 6-2.7 6-6 6Z"></path>
-              <path d="M12 2v2"></path>
-              <path d="M12 22v-2"></path>
-              <path d="m4.93 4.93 1.41 1.41"></path>
-              <path d="m17.66 17.66 1.41 1.41"></path>
-              <path d="M2 12h2"></path>
-              <path d="M22 12h-2"></path>
-              <path d="m6.34 17.66-1.41 1.41"></path>
-              <path d="m19.07 4.93-1.41 1.41"></path>
-            </svg>
-          </div>
-          <div>
-            <h3 className="font-medium text-indigo-700">Daily Time Allocation</h3>
-            <p className="text-indigo-600 text-sm">Remember: 8 hours for sleep, 4 hours for focused work, 8 hours for breaks & other activities</p>
-          </div>
-        </div>
-        
-        <div className="mt-6 border-t pt-6">
-          <h3 className="font-medium mb-4">Reset Application</h3>
-          <button 
-            className="w-full bg-red-100 text-red-700 py-3 rounded-lg font-medium flex items-center justify-center cursor-pointer hover:bg-red-200"
-            onClick={() => {
-              console.log("Reset button clicked");
-              
-              // Reset all state values
-              setWorkTimeTotal(defaultWorkTime);
-              setBreakTimeTotal(defaultBreakTime);
-              setWorkTimeRemaining(defaultWorkTime);
-              setBreakTimeRemaining(defaultBreakTime);
-              setIsWorkActive(false);
-              setIsBreakActive(false);
-              setBreakStartTimestamp(null);
-              setDailyGoalMet(false);
-              setLogs([]);
-              setCurrentFocus("");
-              setSavedFocusItems([]);
-              setEditingFocusId(null);
-              
-              // Clear all localStorage
-              localStorage.clear();
-              
-              console.log("Reset completed");
-            }}
-          >
-            <Trash2 className="mr-2" /> Reset All Data
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-};
+                }
+                // If neither timer was active, start break mode by default
+                else if (!isBreakActive && !isWorkActive) {
+                    setIsBreakActive(true);
+                    setBreakStartTimestamp(now);
+                    addLog("App initialized in break mode by default.");
+                }
 
-export default DualFocusTimer;
+                // Register page visibility change listener
+                const handleVisibilityChange = () => {
+                    if (document.hidden) {
+                        // Page is being hidden/closed
+                        if (isWorkActive) {
+                            // Save that we're switching from work to break directly to localStorage
+                            // This ensures the data is saved even if React state doesn't update in time
+                            localStorage.setItem('isWorkActive', 'false');
+                            localStorage.setItem('isBreakActive', 'true');
+                            localStorage.setItem('breakStartTimestamp', Date.now().toString());
+                            localStorage.setItem('lastPageAction', 'Page was hidden - Switched from work to break mode');
+
+                            // Also update React state
+                            setIsWorkActive(false);
+                            setIsBreakActive(true);
+                            setBreakStartTimestamp(Date.now());
+                            addLog("Page hidden - Switched from work to break mode");
+                        }
+                    } else {
+                        // Page is becoming visible again
+                        const lastAction = localStorage.getItem('lastPageAction');
+                        if (lastAction && lastAction.includes('hidden')) {
+                            // Clear the flag
+                            localStorage.setItem('lastPageAction', '');
+                            addLog("Page visible again after being hidden");
+                        }
+                    }
+                };
+
+                document.addEventListener("visibilitychange", handleVisibilityChange);
+
+                // Add beforeunload event handler to catch browser/tab closing
+                const handleBeforeUnload = () => {
+                    if (isWorkActive) {
+                        // Direct localStorage updates to ensure they're saved
+                        localStorage.setItem('isWorkActive', 'false');
+                        localStorage.setItem('isBreakActive', 'true');
+                        localStorage.setItem('breakStartTimestamp', Date.now().toString());
+                        localStorage.setItem('lastPageAction', 'Page was closed - Switched from work to break mode');
+                    }
+                };
+
+                window.addEventListener("beforeunload", handleBeforeUnload);
+
+                return () => {
+                    document.removeEventListener("visibilitychange", handleVisibilityChange);
+                    window.removeEventListener("beforeunload", handleBeforeUnload);
+                };
+            }, []); // Empty dependency array = run once on mount
+
+            useEffect(() => {
+                let interval;
+
+                // Work timer - only runs when app is open
+                if (isWorkActive && workTimeRemaining > 0) {
+                    // Work timer is active, ensure break timer is inactive
+                    if (isBreakActive) {
+                        setIsBreakActive(false);
+                        setBreakStartTimestamp(null);
+                    }
+
+                    // Standard interval for work timer
+                    interval = setInterval(() => {
+                        setWorkTimeRemaining(prev => prev - 1);
+                    }, 1000);
+                }
+                // Break timer - continues even when app is closed
+                else if (isBreakActive && breakTimeRemaining > 0) {
+                    // If break just started, set the timestamp
+                    if (!breakStartTimestamp) {
+                        setBreakStartTimestamp(Date.now());
+                    }
+
+                    // While app is open, we need an interval for visual updates
+                    interval = setInterval(() => {
+                        const now = Date.now();
+                        const elapsedSeconds = Math.floor((now - breakStartTimestamp) / 1000);
+
+                        // Only update if time has actually passed
+                        if (elapsedSeconds > 0) {
+                            const newBreakTimeRemaining = Math.max(0, breakTimeRemaining - elapsedSeconds);
+                            setBreakTimeRemaining(newBreakTimeRemaining);
+                            setBreakStartTimestamp(now);
+
+                            // Check if break time completed during this interval
+                            if (newBreakTimeRemaining === 0) {
+                                setIsBreakActive(false);
+                                setBreakStartTimestamp(null);
+                                addLog("Break time complete!");
+
+                                // Only start work if the daily goal isn't met yet
+                                if (!dailyGoalMet && workTimeRemaining > 0) {
+                                    setIsWorkActive(true);
+                                }
+                            }
+                        }
+                    }, 1000);
+                }
+                // Work time complete
+                else if (workTimeRemaining === 0 && !dailyGoalMet) {
+                    setDailyGoalMet(true);
+                    setIsWorkActive(false);
+                    setIsBreakActive(true);
+                    setBreakStartTimestamp(Date.now());
+                    addLog("Daily work goal met! 🎉");
+                }
+                // Break time complete
+                else if (breakTimeRemaining === 0 && isBreakActive) {
+                    // Instead of turning off break mode, reset the break timer
+                    setBreakTimeRemaining(breakTimeTotal);
+                    setBreakStartTimestamp(Date.now());
+                    addLog("Break time complete! Starting a new break period.");
+                }
+
+                return () => {
+                    if (interval) clearInterval(interval);
+                };
+            }, [isWorkActive, isBreakActive, workTimeRemaining, breakTimeRemaining, dailyGoalMet, breakStartTimestamp]);
+
+            const formatTime = (seconds) => {
+                const hours = Math.floor(seconds / 3600);
+                const minutes = Math.floor((seconds % 3600) / 60);
+                const secs = seconds % 60;
+
+                return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+            };
+
+            const toggleWorkTimer = () => {
+                // If we're starting work, stop break
+                if (!isWorkActive) {
+                    setIsWorkActive(true);
+                    setIsBreakActive(false);
+                    setBreakStartTimestamp(null); // Clear break timestamp when switching to work
+                    addLog("Switched to work session" + (currentFocus ? `: ${currentFocus}` : ""));
+                }
+                // If we're stopping work, start break
+                else {
+                    setIsWorkActive(false);
+                    setIsBreakActive(true);
+                    setBreakStartTimestamp(Date.now()); // Set break start timestamp
+                    addLog("Switched to break session");
+                }
+            };
+
+            const toggleBreakTimer = () => {
+                // We now only allow switching from break to work, not from work to break
+                // since break is the default state when work is not active
+                if (isBreakActive) {
+                    setIsBreakActive(false);
+                    setIsWorkActive(true);
+                    setBreakStartTimestamp(null); // Clear break timestamp
+                    addLog("Switched to work session");
+                }
+                // No else case needed as break should always be on when work is off
+                // This is handled in the work timer toggle
+            };
+
+            const resetTimers = () => {
+                setIsWorkActive(false);
+                setIsBreakActive(true); // Ensure break mode is active when work is not
+                setWorkTimeRemaining(workTimeTotal);
+                setBreakTimeRemaining(breakTimeTotal);
+                setBreakStartTimestamp(Date.now()); // Set break start timestamp
+                setDailyGoalMet(false);
+                addLog("Reset all timers - now in break mode");
+            };
+
+            // Complete reset function that clears all data for a pristine state
+            const clearAllData = () => {
+                // Clear localStorage first to remove everything
+                localStorage.clear();
+
+                // Reset all state to initial defaults
+                setIsWorkActive(false);
+                setIsBreakActive(false);
+                setWorkTimeTotal(defaultWorkTime);
+                setBreakTimeTotal(defaultBreakTime);
+                setWorkTimeRemaining(defaultWorkTime);
+                setBreakTimeRemaining(defaultBreakTime);
+                setBreakStartTimestamp(null); // Clear break timestamp
+                setDailyGoalMet(false);
+                setLogs([]); // Empty logs completely for pristine state
+                setCurrentFocus("");
+                setSavedFocusItems([]);
+                setEditingFocusId(null);
+                setCurrentBreakActivity("");
+                setSavedBreakActivities([]);
+                setEditingBreakActivityId(null);
+            };
+
+            const addLog = (message) => {
+                const now = new Date();
+                const timeString = now.toLocaleTimeString();
+                setLogs(prev => [`${timeString} - ${message}`, ...prev.slice(0, 9)]);
+            };
+
+            const calculateProgress = (remaining, total) => {
+                return ((total - remaining) / total) * 100;
+            };
+
+            const workProgress = calculateProgress(workTimeRemaining, workTimeTotal);
+            const breakProgress = calculateProgress(breakTimeRemaining, breakTimeTotal);
+
+            return (
+                <div className="flex flex-col h-full p-6 max-w-4xl mx-auto bg-gray-50 rounded-lg shadow-lg">
+                    <h1 className="text-3xl font-bold text-center mb-2">Dual Focus Timer</h1>
+                    <p className="text-center text-gray-600 mb-2">24-hour day: 8 hours sleep, 4 hours focused work, 8 hours break time</p>
+                    <p className="text-center text-blue-600 font-medium mb-6">Work time only progresses when this page is open</p>
+
+                    <div className="flex flex-col md:flex-row gap-8 mb-8">
+                        {/* Work Timer */}
+                        <div className="flex-1 bg-white p-6 rounded-lg shadow relative">
+                            <div
+                                className="absolute inset-0 bg-blue-100 rounded-lg"
+                                style={{ width: `${workProgress}%`, transition: 'width 1s linear' }}
+                            ></div>
+                            <div className="relative">
+                                <div className="mb-4">
+                                    <div className="flex">
+                                        <input
+                                            type="text"
+                                            value={currentFocus}
+                                            onChange={(e) => setCurrentFocus(e.target.value)}
+                                            placeholder="What are you focusing on now?"
+                                            className="flex-1 p-2 border border-blue-200 rounded-l-md focus:outline-none focus:ring-2 focus:ring-blue-300"
+                                        />
+                                        <button
+                                            onClick={() => {
+                                                if (currentFocus.trim()) {
+                                                    if (editingFocusId !== null) {
+                                                        // Update existing item
+                                                        setSavedFocusItems(savedFocusItems.map(item =>
+                                                            item.id === editingFocusId ? { ...item, text: currentFocus } : item
+                                                        ));
+                                                        setEditingFocusId(null);
+                                                    } else {
+                                                        // Add new item
+                                                        setSavedFocusItems([
+                                                            ...savedFocusItems,
+                                                            { id: Date.now(), text: currentFocus }
+                                                        ]);
+                                                    }
+                                                    setCurrentFocus("");
+                                                    addLog(`Saved focus: ${currentFocus}`);
+                                                }
+                                            }}
+                                            className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-2 rounded-r-md"
+                                        >
+                                            {editingFocusId !== null ? "Update" : "Save"}
+                                        </button>
+                                    </div>
+
+                                    {savedFocusItems.length > 0 && (
+                                        <div className="mt-2 max-h-32 overflow-y-auto">
+                                            <div className="flex justify-between items-center">
+                                                <h3 className="text-sm font-medium text-gray-700 mb-1">Saved focus items:</h3>
+                                                <span className="text-xs text-gray-500">(Click on an item to use it)</span>
+                                            </div>
+                                            <ul className="space-y-1">
+                                                {savedFocusItems.map(item => (
+                                                    <li key={item.id} className="flex items-center text-sm bg-gray-50 p-1 rounded">
+                                                        <span
+                                                            className="flex-1 truncate cursor-pointer hover:underline"
+                                                            onClick={() => {
+                                                                setCurrentFocus(item.text);
+                                                                addLog(`Selected focus: ${item.text}`);
+                                                            }}
+                                                        >
+                                                            {item.text}
+                                                        </span>
+                                                        <button
+                                                            onClick={() => {
+                                                                setCurrentFocus(item.text);
+                                                                setEditingFocusId(item.id);
+                                                            }}
+                                                            className="text-blue-500 hover:text-blue-700 ml-1"
+                                                        >
+                                                            Edit
+                                                        </button>
+                                                        <button
+                                                            onClick={() => {
+                                                                setSavedFocusItems(savedFocusItems.filter(i => i.id !== item.id));
+                                                                if (editingFocusId === item.id) {
+                                                                    setEditingFocusId(null);
+                                                                    setCurrentFocus("");
+                                                                }
+                                                            }}
+                                                            className="text-red-500 hover:text-red-700 ml-1"
+                                                        >
+                                                            Delete
+                                                        </button>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <h2 className="text-xl font-semibold mb-4 flex items-center">
+                                    <Clock className="mr-2" /> Work Time ({Math.floor(workTimeTotal / 3600)}h)
+                                </h2>
+                                <div className="text-5xl font-mono text-center my-6">
+                                    {formatTime(workTimeRemaining)}
+                                </div>
+
+                                <div className="flex justify-center gap-4">
+                                    <button
+                                        onClick={toggleWorkTimer}
+                                        className={`p-3 rounded-full ${isWorkActive ? 'bg-blue-500 hover:bg-blue-600' : 'bg-gray-200 hover:bg-gray-300'} transition-colors`}
+                                    >
+                                        {isWorkActive ? <Clock size={36} className="text-white" /> : <Clock size={36} className="text-gray-600" />}
+                                    </button>
+                                </div>
+                                {dailyGoalMet && (
+                                    <div className="mt-4 text-center text-green-600 flex items-center justify-center">
+                                        <CheckCircle className="mr-2" /> Daily goal completed!
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Break Timer */}
+                        <div className="flex-1 bg-white p-6 rounded-lg shadow relative">
+                            <div
+                                className="absolute inset-0 bg-green-100 rounded-lg"
+                                style={{ width: `${breakProgress}%`, transition: 'width 1s linear' }}
+                            ></div>
+                            <div className="relative">
+                                <div className="mb-4">
+                                    <div className="flex">
+                                        <input
+                                            type="text"
+                                            value={currentBreakActivity}
+                                            onChange={(e) => setCurrentBreakActivity(e.target.value)}
+                                            placeholder="What would you like to do on your break?"
+                                            className="flex-1 p-2 border border-green-200 rounded-l-md focus:outline-none focus:ring-2 focus:ring-green-300"
+                                        />
+                                        <button
+                                            onClick={() => {
+                                                if (currentBreakActivity.trim()) {
+                                                    if (editingBreakActivityId !== null) {
+                                                        // Update existing item
+                                                        setSavedBreakActivities(savedBreakActivities.map(item =>
+                                                            item.id === editingBreakActivityId ? { ...item, text: currentBreakActivity } : item
+                                                        ));
+                                                        setEditingBreakActivityId(null);
+                                                    } else {
+                                                        // Add new item
+                                                        setSavedBreakActivities([
+                                                            ...savedBreakActivities,
+                                                            { id: Date.now(), text: currentBreakActivity }
+                                                        ]);
+                                                    }
+                                                    setCurrentBreakActivity("");
+                                                    addLog(`Saved break activity: ${currentBreakActivity}`);
+                                                }
+                                            }}
+                                            className="bg-green-500 hover:bg-green-600 text-white px-3 py-2 rounded-r-md"
+                                        >
+                                            {editingBreakActivityId !== null ? "Update" : "Save"}
+                                        </button>
+                                    </div>
+
+                                    {savedBreakActivities.length > 0 && (
+                                        <div className="mt-2 max-h-32 overflow-y-auto">
+                                            <div className="flex justify-between items-center">
+                                                <h3 className="text-sm font-medium text-gray-700 mb-1">Break activities:</h3>
+                                                <span className="text-xs text-gray-500">(Click on an item to use it)</span>
+                                            </div>
+                                            <ul className="space-y-1">
+                                                {savedBreakActivities.map(item => (
+                                                    <li key={item.id} className="flex items-center text-sm bg-gray-50 p-1 rounded">
+                                                        <span
+                                                            className="flex-1 truncate cursor-pointer hover:underline"
+                                                            onClick={() => {
+                                                                setCurrentBreakActivity(item.text);
+                                                                addLog(`Selected break activity: ${item.text}`);
+                                                            }}
+                                                        >
+                                                            {item.text}
+                                                        </span>
+                                                        <button
+                                                            onClick={() => {
+                                                                setCurrentBreakActivity(item.text);
+                                                                setEditingBreakActivityId(item.id);
+                                                            }}
+                                                            className="text-green-500 hover:text-green-700 ml-1"
+                                                        >
+                                                            Edit
+                                                        </button>
+                                                        <button
+                                                            onClick={() => {
+                                                                setSavedBreakActivities(savedBreakActivities.filter(i => i.id !== item.id));
+                                                                if (editingBreakActivityId === item.id) {
+                                                                    setEditingBreakActivityId(null);
+                                                                    setCurrentBreakActivity("");
+                                                                }
+                                                            }}
+                                                            className="text-red-500 hover:text-red-700 ml-1"
+                                                        >
+                                                            Delete
+                                                        </button>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <h2 className="text-xl font-semibold mb-4 flex items-center">
+                                    <Clock className="mr-2" /> Break Time ({Math.floor(breakTimeTotal / 3600)}h)
+                                </h2>
+                                <div className="text-5xl font-mono text-center my-6">
+                                    {formatTime(breakTimeRemaining)}
+                                </div>
+                                <div className="flex justify-center gap-4">
+                                    <button
+                                        onClick={toggleBreakTimer}
+                                        className={`p-3 rounded-full ${isBreakActive ? 'bg-green-500 hover:bg-green-600' : 'bg-gray-200 hover:bg-gray-300'} transition-colors`}
+                                    >
+                                        {isBreakActive ? <Clock size={36} className="text-white" /> : <Clock size={36} className="text-gray-600" />}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="flex justify-center mb-8">
+                        <button
+                            onClick={resetTimers}
+                            className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg flex items-center cursor-pointer"
+                        >
+                            <RotateCcw className="mr-2 h-5 w-5" /> Reset Timers
+                        </button>
+                    </div>
+
+                    <div className="bg-white p-6 rounded-lg shadow mb-6">
+                        <div className="flex justify-between items-center mb-4">
+                            <h2 className="text-xl font-semibold">Activity Log</h2>
+                        </div>
+                        <div className="border rounded-lg divide-y max-h-64 overflow-y-auto">
+                            {logs.length === 0 ? (
+                                <p className="p-4 text-center text-gray-500">No activity yet</p>
+                            ) : (
+                                logs.map((log, index) => (
+                                    <div key={index} className="p-3">
+                                        {log}
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="bg-white p-6 rounded-lg shadow">
+                        <h2 className="text-xl font-semibold mb-4">Settings</h2>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div>
+                                <label className="block mb-2 font-medium">Work Time (hours)</label>
+                                <select
+                                    value={Math.floor(workTimeTotal / 3600)}
+                                    onChange={(e) => {
+                                        const newHours = parseInt(e.target.value);
+                                        setWorkTimeTotal(newHours * 3600);
+                                        setWorkTimeRemaining(newHours * 3600);
+                                    }}
+                                    className="w-full p-2 border rounded-lg"
+                                    disabled={isWorkActive || isBreakActive}
+                                >
+                                    {[1, 2, 3, 4, 5, 6, 7, 8].map(hours => (
+                                        <option key={hours} value={hours}>{hours} hours</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block mb-2 font-medium">Break Time (hours)</label>
+                                <select
+                                    value={Math.floor(breakTimeTotal / 3600)}
+                                    onChange={(e) => {
+                                        const newHours = parseInt(e.target.value);
+                                        setBreakTimeTotal(newHours * 3600);
+                                        setBreakTimeRemaining(newHours * 3600);
+                                    }}
+                                    className="w-full p-2 border rounded-lg"
+                                    disabled={isWorkActive || isBreakActive}
+                                >
+                                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(hours => (
+                                        <option key={hours} value={hours}>{hours} hours</option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+
+                        <div className="mt-6 bg-indigo-50 p-4 rounded-lg flex items-center">
+                            <div className="w-10 h-10 bg-indigo-200 rounded-full flex items-center justify-center mr-4">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-indigo-600">
+                                    <path d="M12 18c-3.3 0-6-2.7-6-6s2.7-6 6-6 6 2.7 6 6-2.7 6-6 6Z"></path>
+                                    <path d="M12 2v2"></path>
+                                    <path d="M12 22v-2"></path>
+                                    <path d="m4.93 4.93 1.41 1.41"></path>
+                                    <path d="m17.66 17.66 1.41 1.41"></path>
+                                    <path d="M2 12h2"></path>
+                                    <path d="M22 12h-2"></path>
+                                    <path d="m6.34 17.66-1.41 1.41"></path>
+                                    <path d="m19.07 4.93-1.41 1.41"></path>
+                                </svg>
+                            </div>
+                            <div>
+                                <h3 className="font-medium text-indigo-700">Daily Time Allocation</h3>
+                                <p className="text-indigo-600 text-sm">Remember: 8 hours for sleep, 4 hours for focused work, 8 hours for breaks & other activities</p>
+                            </div>
+                        </div>
+
+                        <div className="mt-6 border-t pt-6">
+                            <h3 className="font-medium mb-4">Reset Application</h3>
+                            <button
+                                className="w-full bg-red-100 text-red-700 py-3 rounded-lg font-medium flex items-center justify-center cursor-pointer hover:bg-red-200"
+                                onClick={() => {
+                                    console.log("Reset button clicked");
+
+                                    // Reset all state values
+                                    setWorkTimeTotal(defaultWorkTime);
+                                    setBreakTimeTotal(defaultBreakTime);
+                                    setWorkTimeRemaining(defaultWorkTime);
+                                    setBreakTimeRemaining(defaultBreakTime);
+                                    setIsWorkActive(false);
+                                    setIsBreakActive(false);
+                                    setBreakStartTimestamp(null);
+                                    setDailyGoalMet(false);
+                                    setLogs([]);
+                                    setCurrentFocus("");
+                                    setSavedFocusItems([]);
+                                    setEditingFocusId(null);
+
+                                    // Clear all localStorage
+                                    localStorage.clear();
+
+                                    console.log("Reset completed");
+                                }}
+                            >
+                                <Trash2 className="mr-2" /> Reset All Data
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // Render the component
+        ReactDOM.render(<DualFocusTimer />, document.getElementById('root'));
+    </script>
+</body>
+</html>
